@@ -4,7 +4,7 @@ from flask_login import login_required
 from app.extensions import db
 from app.models import Plant, Pond
 from app.services.rules import RuleError, assert_can_set_pond_status, latest_batch_for_pond
-from app.services.status_scope import footer_statuses, grid_statuses, remember_all_clear
+from app.services.status_scope import allowed_statuses
 
 bp = Blueprint("board", __name__, url_prefix="/board")
 
@@ -29,8 +29,6 @@ def floor_plan():
     status_filter = (request.args.get("status") or "").strip() or None
     if status_filter not in (None, Pond.STATUS_FILLING, Pond.STATUS_SLAKING, Pond.STATUS_DRAWN):
         status_filter = None
-    if status_filter is None:
-        remember_all_clear()
 
     ponds = []
     if active_plant:
@@ -40,20 +38,20 @@ def floor_plan():
             .all()
         )
 
-    grid_ok = grid_statuses(status_filter)
-    foot_ok = footer_statuses(status_filter)
+    # 网格点亮与页脚计数共用同一筛选范围，二者不可能再分叉
+    allowed = allowed_statuses(status_filter)
 
     pond_cards = []
     for pond in ponds:
-        if grid_ok is not None and pond.status not in grid_ok:
+        if allowed is not None and pond.status not in allowed:
             continue
         batch = latest_batch_for_pond(pond)
         pond_cards.append({"pond": pond, "batch": batch})
 
-    if foot_ok is None:
+    if allowed is None:
         footer_count = len(ponds)
     else:
-        footer_count = sum(1 for p in ponds if p.status in foot_ok)
+        footer_count = sum(1 for p in ponds if p.status in allowed)
 
     selected_id = request.args.get("pond", type=int)
     selected = None
